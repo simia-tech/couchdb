@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/simia-tech/errx"
 )
@@ -47,7 +48,9 @@ func (dfr *DocumentFetchRequest) Do() (*DocumentFetchResponse, error) {
 	}
 	defer response.Body.Close()
 
-	r := &DocumentFetchResponse{}
+	r := &DocumentFetchResponse{
+		Revision: strings.Trim(response.Header.Get("ETag"), `"`),
+	}
 	if err := json.NewDecoder(response.Body).Decode(&r.Document); err != nil {
 		return nil, errx.Annotatef(err, "json decode")
 	}
@@ -62,5 +65,6 @@ func (dfr *DocumentFetchRequest) Do() (*DocumentFetchResponse, error) {
 
 // DocumentFetchResponse defines the document create response.
 type DocumentFetchResponse struct {
+	Revision string
 	Document Document
 }

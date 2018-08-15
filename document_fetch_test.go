@@ -25,5 +25,6 @@ func TestDocumentFetch(t *testing.T) {
 	response, err := db.Document().Fetch(createResponse.ID).WithRevision(createResponse.Revision).Do()
 	require.NoError(t, err)
 
+	assert.Equal(t, createResponse.Revision, response.Revision)
 	assert.Equal(t, document, response.Document)
 }
