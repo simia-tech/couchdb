@@ -15,7 +15,7 @@ type Client struct {
 	Username string
 	Password string
 
-	httpClient http.Client
+	HTTPClient http.Client
 }
 
 // Database returns a reference to the database with the provided name.
@@ -27,7 +27,7 @@ func (c *Client) Database(name string) *DatabaseRef {
 }
 
 func (c *Client) do(request *http.Request) (*http.Response, error) {
-	return c.httpClient.Do(request)
+	return c.HTTPClient.Do(request)
 }
 
 func (c *Client) requestFor(ctx context.Context, body io.Reader, method string, parts ...string) (*http.Request, error) {
