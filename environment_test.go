@@ -4,14 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/simia-tech/couchdb"
-	"github.com/simia-tech/env"
-)
+	"github.com/stretchr/testify/require"
 
-var (
-	couchDBUserURL  = env.String("COUCHDB_BASE_URL", "http://127.0.0.1:5984")
-	couchDBUsername = env.String("COUCHDB_USERNAME", "admin")
-	couchDBPassword = env.String("COUCHDB_PASSWORD", "")
+	"github.com/simia-tech/couchdb"
 )
 
 type environment struct {
@@ -23,11 +18,8 @@ type environment struct {
 func setUpTestEnvironment(tb testing.TB) *environment {
 	ctx := context.Background()
 
-	client := &couchdb.Client{
-		BaseURL:  couchDBUserURL.Get(),
-		Username: couchDBUsername.Get(),
-		Password: couchDBPassword.Get(),
-	}
+	client, err := couchdb.NewClient("http://127.0.0.1:5984", couchdb.WithUsername("admin"), couchdb.WithPassword("admin"))
+	require.NoError(tb, err)
 
 	return &environment{
 		ctx:      ctx,

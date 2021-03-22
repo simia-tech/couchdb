@@ -2,54 +2,94 @@ package couchdb
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
-	"github.com/simia-tech/errx"
+	"github.com/simia-tech/couchdb/value"
 )
 
 // Client implements a simple couch db client.
 type Client struct {
-	BaseURL  string
-	Username string
-	Password string
+	baseURL  string
+	username string
+	password string
 
-	HTTPClient http.Client
+	httpClient HTTPClient
 }
 
-// Database returns a reference to the database with the provided name.
-func (c *Client) Database(name string) *DatabaseRef {
-	return &DatabaseRef{
-		client: c,
-		name:   name,
+// NewClient returns a new client configured with the provided options.
+func NewClient(baseURL string, options ...ClientOption) (*Client, error) {
+	c := &Client{
+		baseURL:    baseURL,
+		httpClient: NewHTTPClientStd(nil),
 	}
+	for _, o := range options {
+		if err := o(c); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
 }
 
-func (c *Client) do(request *http.Request) (*http.Response, error) {
-	return c.HTTPClient.Do(request)
+// InstanceInfo fetches some basic infos from the couchdb instance.
+func (c *Client) InstanceInfo(ctx context.Context) (value.InstanceInfo, error) {
+	r := value.InstanceInfo{}
+
+	if err := c.requestJSON(ctx, http.MethodGet, "/", &r); err != nil {
+		return r, err
+	}
+
+	return r, nil
 }
 
-func (c *Client) requestFor(ctx context.Context, body io.Reader, method string, parts ...string) (*http.Request, error) {
-	request, err := http.NewRequest(method, c.urlFor(parts...), body)
+// AllDatabases fetches a list of all databases.
+func (c *Client) AllDatabases(ctx context.Context) ([]string, error) {
+	r := []string{}
+
+	if err := c.requestJSON(ctx, http.MethodGet, "/_all_dbs", &r); err != nil {
+		return r, err
+	}
+
+	return r, nil
+}
+
+func (c *Client) requestJSON(ctx context.Context, method, path string, responseBody interface{}) error {
+	header := http.Header{}
+	header.Add("Accept", "application/json")
+
+	rc, err := c.request(ctx, method, path, header)
 	if err != nil {
-		return nil, errx.Annotatef(err, "new request")
+		return err
 	}
-	if ctx != nil {
-		request = request.WithContext(ctx)
+	defer rc.Close()
+
+	r := io.Reader(rc)
+	// b := bytes.Buffer{}
+	// r = io.TeeReader(r, &b)
+
+	if err := json.NewDecoder(r).Decode(responseBody); err != nil {
+		return fmt.Errorf("json decode: %w", err)
 	}
 
-	if c.Username != "" && c.Password != "" {
-		request.SetBasicAuth(c.Username, c.Password)
-	}
+	// log.Printf("json repsonse:\n%s\n", b.String())
 
-	return request, nil
+	return nil
 }
 
-func (c *Client) urlFor(parts ...string) string {
-	baseURL := c.BaseURL
-	if strings.HasSuffix(baseURL, "/") {
-		baseURL = baseURL[:len(baseURL)-1]
+func (c *Client) request(ctx context.Context, method, path string, header http.Header) (io.ReadCloser, error) {
+	url := c.baseURL + path
+
+	if c.username != "" && c.password != "" {
+		header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(c.username+":"+c.password)))
 	}
-	return strings.Join(append([]string{c.BaseURL}, parts...), "/")
+
+	r, err := c.httpClient.Request(ctx, method, url, header)
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
