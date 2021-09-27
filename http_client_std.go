@@ -21,17 +21,22 @@ func NewHTTPClientStd(client *http.Client) *HTTPClientStd {
 }
 
 // Request performs a http request using the provided parameters.
-func (c *HTTPClientStd) Request(ctx context.Context, method, url string, header http.Header) (io.ReadCloser, error) {
-	request, err := http.NewRequestWithContext(ctx, method, url, nil)
+func (c *HTTPClientStd) Request(
+	ctx context.Context,
+	method, url string,
+	header http.Header,
+	body io.Reader,
+) (int, http.Header, io.ReadCloser, error) {
+	request, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("new request: %w", err)
+		return 0, nil, nil, fmt.Errorf("new request: %w", err)
 	}
 	request.Header = header
 
 	response, err := c.client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("do: %w", err)
+		return 0, nil, nil, fmt.Errorf("do: %w", err)
 	}
 
-	return response.Body, nil
+	return response.StatusCode, response.Header, response.Body, nil
 }

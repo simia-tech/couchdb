@@ -8,5 +8,5 @@ import (
 
 // HTTPClient defines an interface of a http client.
 type HTTPClient interface {
-	Request(context.Context, string, string, http.Header) (io.ReadCloser, error)
+	Request(context.Context, string, string, http.Header, io.Reader) (int, http.Header, io.ReadCloser, error)
 }

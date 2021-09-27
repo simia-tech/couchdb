@@ -32,7 +32,7 @@ func NewDatabase(client *Client, name string) *Database {
 // Create creates the database.
 func (db *Database) Create(ctx context.Context) error {
 	r := value.Status{}
-	if err := db.client.requestJSON(ctx, http.MethodPut, "/"+db.name, &r); err != nil {
+	if err := db.client.requestJSON(ctx, http.MethodPut, "/"+db.name, nil, nil, &r); err != nil {
 		return err
 	}
 	if !r.OK {
@@ -49,7 +49,7 @@ func (db *Database) Create(ctx context.Context) error {
 // Delete deletes the database.
 func (db *Database) Delete(ctx context.Context) error {
 	r := value.Status{}
-	if err := db.client.requestJSON(ctx, http.MethodDelete, "/"+db.name, &r); err != nil {
+	if err := db.client.requestJSON(ctx, http.MethodDelete, "/"+db.name, nil, nil, &r); err != nil {
 		return err
 	}
 	if !r.OK {
@@ -66,7 +66,7 @@ func (db *Database) Delete(ctx context.Context) error {
 // Info fetches infos about the database.
 func (db *Database) Info(ctx context.Context) (value.DatabaseInfo, error) {
 	r := value.DatabaseInfo{}
-	if err := db.client.requestJSON(ctx, http.MethodGet, "/"+db.name, &r); err != nil {
+	if err := db.client.requestJSON(ctx, http.MethodGet, "/"+db.name, nil, nil, &r); err != nil {
 		return r, err
 	}
 	return r, nil

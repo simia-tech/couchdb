@@ -1,14 +1,22 @@
 package couchdb
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/simia-tech/couchdb/value"
+)
+
+// Various errors.
+var (
+	ErrBadRequest = errors.New("bad request")
+	ErrConflict   = errors.New("conflict")
 )
 
 // Client implements a simple couch db client.
@@ -38,7 +46,7 @@ func NewClient(baseURL string, options ...ClientOption) (*Client, error) {
 func (c *Client) InstanceInfo(ctx context.Context) (value.InstanceInfo, error) {
 	r := value.InstanceInfo{}
 
-	if err := c.requestJSON(ctx, http.MethodGet, "/", &r); err != nil {
+	if err := c.requestJSON(ctx, http.MethodGet, "/", nil, nil, &r); err != nil {
 		return r, err
 	}
 
@@ -49,28 +57,51 @@ func (c *Client) InstanceInfo(ctx context.Context) (value.InstanceInfo, error) {
 func (c *Client) AllDatabases(ctx context.Context) ([]string, error) {
 	r := []string{}
 
-	if err := c.requestJSON(ctx, http.MethodGet, "/_all_dbs", &r); err != nil {
+	if err := c.requestJSON(ctx, http.MethodGet, "/_all_dbs", nil, nil, &r); err != nil {
 		return r, err
 	}
 
 	return r, nil
 }
 
-func (c *Client) requestJSON(ctx context.Context, method, path string, responseBody interface{}) error {
-	header := http.Header{}
+func (c *Client) requestJSON(
+	ctx context.Context,
+	method,
+	path string,
+	header http.Header,
+	body,
+	responseBody interface{},
+) error {
+	if header == nil {
+		header = http.Header{}
+	}
 	header.Add("Accept", "application/json")
 
-	rc, err := c.request(ctx, method, path, header)
+	bodyReader := io.Reader(nil)
+	if body != nil {
+		buffer := &bytes.Buffer{}
+		if err := json.NewEncoder(buffer).Encode(body); err != nil {
+			return fmt.Errorf("json encode: %w", err)
+		}
+		bodyReader = buffer
+		header.Add("Content-Type", "application/json")
+	}
+
+	statusCode, _, responseReader, err := c.request(ctx, method, path, header, bodyReader)
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer responseReader.Close()
 
-	r := io.Reader(rc)
+	reader := io.Reader(responseReader)
 	// b := bytes.Buffer{}
-	// r = io.TeeReader(r, &b)
+	// reader = io.TeeReader(reader, &b)
 
-	if err := json.NewDecoder(r).Decode(responseBody); err != nil {
+	if err := checkJSONError(statusCode, reader); err != nil {
+		return err
+	}
+
+	if err := json.NewDecoder(reader).Decode(responseBody); err != nil {
 		return fmt.Errorf("json decode: %w", err)
 	}
 
@@ -79,17 +110,33 @@ func (c *Client) requestJSON(ctx context.Context, method, path string, responseB
 	return nil
 }
 
-func (c *Client) request(ctx context.Context, method, path string, header http.Header) (io.ReadCloser, error) {
+func (c *Client) request(
+	ctx context.Context,
+	method,
+	path string,
+	header http.Header,
+	body io.Reader,
+) (int, http.Header, io.ReadCloser, error) {
 	url := c.baseURL + path
 
 	if c.username != "" && c.password != "" {
 		header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(c.username+":"+c.password)))
 	}
 
-	r, err := c.httpClient.Request(ctx, method, url, header)
+	statusCode, responseHeader, responseReader, err := c.httpClient.Request(ctx, method, url, header, body)
 	if err != nil {
-		return nil, err
+		return 0, nil, nil, err
 	}
 
-	return r, nil
+	return statusCode, responseHeader, responseReader, nil
+}
+
+func checkJSONError(statusCode int, reader io.Reader) error {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return ErrBadRequest
+	case http.StatusConflict:
+		return ErrConflict
+	}
+	return nil
 }
